@@ -1,0 +1,571 @@
+openapi: 3.1.0
+info:
+  title: Settle settlement API
+  version: 0.1.0
+  summary: Verified quotes, unsigned Stellar payments, idempotent submission and receipts. Testnet only.
+  description: |
+    The authoritative server boundary for [Settle](https://github.com/Anasabubakar/settle).
+
+    **This service is testnet-only.** It refuses to start on any other network. All examples use Stellar
+    *testnet* accounts and fixture data; none contain real credentials, real providers or personal bill data.
+
+    ## The rules this contract enforces
+
+    1. **The client has no authority over where money goes or what it is worth.** A quote request names a bill
+       and an amount. It may not carry a destination, asset issuer, provider, rate, fee or memo; sending one is
+       refused with `client_authority_forbidden`. The server resolves all of them.
+    2. **The wallet signs only what the server produced.** The quote returns an unsigned transaction. A signed
+       transaction that differs in any way is refused (`signed_payload_mismatch`) before it reaches the network.
+    3. **Writes are idempotent.** Every `POST` needs an `Idempotency-Key`. A retry with the same key and request
+       returns the original response; the same key with a different request is refused.
+    4. **A payment is only `confirmed` after independent confirmation.** The service re-reads the transaction
+       from the network and compares it to the quote. Only a match produces a receipt.
+    5. **Quotes expire and are single-use.** The transaction's own time bound equals the quote's expiry, so an
+       expired transaction can never land.
+
+    Fiat amounts are integer **minor units** (kobo, pence, cents). USDC amounts are integer **stroops**
+    (1 USDC = 10,000,000). A fiat minor unit is never a USDC cent; conversion uses the disclosed rate.
+  license:
+    name: MIT
+    url: https://opensource.org/license/mit
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local testnet instance
+tags:
+  - name: Quotes
+  - name: Payments
+  - name: Receipts
+  - name: Bills
+  - name: Service
+paths:
+  /healthz:
+    get:
+      tags: [Service]
+      operationId: getHealth
+      summary: Liveness, and whether the receipt ledger verifies
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, network, ledger]
+                properties:
+                  status: { type: string, const: ok }
+                  network: { type: string, const: testnet }
+                  ledger: { $ref: "#/components/schemas/LedgerStatus" }
+  /v1/config:
+    get:
+      tags: [Service]
+      operationId: getConfig
+      summary: Read-only network and asset configuration
+      description: For display and diagnostics. A client must not use it to build a payment; the quote is authoritative.
+      responses:
+        "200":
+          description: Configuration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceConfig" }
+  /v1/bills:
+    get:
+      tags: [Bills]
+      operationId: listBills
+      summary: Server-side accounting for every bill
+      responses:
+        "200":
+          description: Bills.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bills]
+                properties:
+                  bills:
+                    type: array
+                    items: { $ref: "#/components/schemas/Bill" }
+  /v1/bills/{billId}:
+    get:
+      tags: [Bills]
+      operationId: getBill
+      summary: Funded, reserved and remaining amounts for one bill
+      parameters:
+        - $ref: "#/components/parameters/BillId"
+      responses:
+        "200":
+          description: The bill.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Bill" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/quotes:
+    post:
+      tags: [Quotes]
+      operationId: createQuote
+      summary: Create a verified, expiring quote and an unsigned payment
+      description: |
+        Verifies the bill and its provider, converts the fiat amount to USDC at a disclosed rate, checks the
+        supporter's account (exists, trusts the asset, holds enough, can pay the fee), reserves the amount against
+        the bill, and returns an **unsigned** Stellar transaction for the supporter's wallet to sign.
+
+        The reservation is released when the quote expires or its payment fails.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteRequest" }
+            examples:
+              testnet:
+                summary: A $10.00 contribution to a demo bill
+                value:
+                  billId: bill-maya-prescription
+                  amountMinor: 1000
+                  currency: USD
+                  sourceAccount: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7
+      responses:
+        "201":
+          description: "Quote created. `Idempotent-Replay: true` is set when this is a replay."
+          headers:
+            Idempotent-Replay: { $ref: "#/components/headers/IdempotentReplay" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "400":
+          description: |
+            Malformed request, a missing `Idempotency-Key`, an unknown field, or `client_authority_forbidden`
+            (the client supplied a destination, asset issuer, provider, rate, fee, memo or network).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: |
+            The request is valid but cannot be honoured now: `bill_not_open`, `exceeds_remaining`,
+            `source_account_not_found`, `trustline_missing`, `insufficient_balance`,
+            `insufficient_native_balance`, or `request_in_progress`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+        "422":
+          description: "`currency_mismatch`, `amount_too_small`, `partial_funding_not_allowed`, or `idempotency_key_reuse`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+  /v1/quotes/{quoteId}:
+    get:
+      tags: [Quotes]
+      operationId: getQuote
+      summary: Read a quote, including whether it has expired
+      parameters:
+        - $ref: "#/components/parameters/QuoteId"
+      responses:
+        "200":
+          description: The quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/payments:
+    post:
+      tags: [Payments]
+      operationId: submitPayment
+      summary: Submit the transaction the supporter signed
+      description: |
+        The signed transaction must be exactly the one the quote returned. It is checked field by field and by
+        hash, and the signature is checked against the supporter's account, **before** anything is sent to
+        Stellar. A payment is written down as `submitted` before it is sent, so a crash mid-flight is recovered
+        by the observer rather than lost.
+
+        The response status reports the lifecycle: `200` for a settled outcome (`confirmed` or `failed`), `202`
+        when the network has not yet shown the transaction (`submitted`; poll `GET /v1/payments/{paymentId}`).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentRequest" }
+      responses:
+        "200":
+          description: Settled outcome.
+          headers:
+            Idempotent-Replay: { $ref: "#/components/headers/IdempotentReplay" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "202":
+          description: Submitted; confirmation pending.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "400":
+          description: "`invalid_xdr`, `invalid_quote_id`, `unknown_fields`, or a missing `Idempotency-Key`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: "`quote_already_used` (quotes are single-use), `quote_failed`, or `request_in_progress`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "410":
+          description: "`quote_expired`: request a new quote before signing."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: |
+            `signed_payload_mismatch` (the details name the field that differs), `invalid_signature`,
+            `fee_bump_not_accepted`, or `idempotency_key_reuse`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/payments/{paymentId}:
+    get:
+      tags: [Payments]
+      operationId: getPayment
+      summary: Payment status; polling also drives confirmation forward
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+      responses:
+        "200":
+          description: The payment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/receipts/{receiptId}:
+    get:
+      tags: [Receipts]
+      operationId: getReceipt
+      summary: An immutable, hash-chained receipt for a confirmed payment
+      parameters:
+        - name: receiptId
+          in: path
+          required: true
+          schema: { type: string, pattern: "^r_[a-z0-9]+$" }
+      responses:
+        "200":
+          description: The receipt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/ledger:
+    get:
+      tags: [Receipts]
+      operationId: getLedger
+      summary: Head of the receipt ledger and whether the whole chain verifies
+      responses:
+        "200":
+          description: Ledger status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LedgerStatus" }
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        8-128 characters of letters, digits, `.`, `_`, `:` or `-`. Generate one per user action and reuse it on
+        every retry of that action. Keys are remembered for 48 hours.
+      schema: { type: string, pattern: "^[A-Za-z0-9._:-]{8,128}$" }
+      example: pay-2026-10-26-3f9a1c
+    BillId:
+      name: billId
+      in: path
+      required: true
+      schema: { type: string }
+      example: bill-maya-prescription
+    QuoteId:
+      name: quoteId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^q_[a-z0-9]+$" }
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^p_[a-z0-9]+$" }
+  headers:
+    IdempotentReplay:
+      description: "`true` when the response is a stored replay of an earlier identical request."
+      schema: { type: string, const: "true" }
+  responses:
+    Error:
+      description: Error. The `code` is stable and machine-readable; the `message` is safe to display.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After:
+          description: Seconds until the client may retry.
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    StellarPublicKey:
+      type: string
+      pattern: "^G[A-Z2-7]{55}$"
+      description: A Stellar account public key.
+      example: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7
+    Currency:
+      type: string
+      enum: [USD, GBP, CAD, NGN, KES]
+    QuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [billId, amountMinor, currency, sourceAccount]
+      description: |
+        Deliberately small. The following are **never** accepted from a client and are refused with
+        `client_authority_forbidden`: `destination`, `assetIssuer`, `assetCode`, `issuer`, `providerId`,
+        `usdcAmountStroops`, `memo`, `rate`, `fee`, `network`, `networkPassphrase`.
+      properties:
+        billId: { type: string }
+        amountMinor:
+          description: Fiat amount in minor units. A positive whole number.
+          oneOf:
+            - { type: integer, minimum: 1 }
+            - { type: string, pattern: "^[1-9][0-9]{0,15}$" }
+        currency:
+          allOf:
+            - $ref: "#/components/schemas/Currency"
+          description: Must equal the bill's currency.
+        sourceAccount:
+          allOf:
+            - $ref: "#/components/schemas/StellarPublicKey"
+          description: The supporter's account. The only party who can sign this payment.
+    Quote:
+      type: object
+      required: [quoteId, usdcAmountStroops, assetIssuer, destination, memo, expiresAt, unsignedXdr, state, fees, rate]
+      description: |
+        The first six fields are exactly the Settle client's `SettlementQuote` type. The rest is what a supporter
+        needs to understand what they are signing.
+      properties:
+        quoteId: { type: string, pattern: "^q_[a-z0-9]+$" }
+        usdcAmountStroops:
+          type: string
+          description: USDC the provider receives, in stroops. Rounded up from the fiat amount so a provider is never underpaid by rounding.
+          example: "100000000"
+        assetIssuer:
+          allOf:
+            - $ref: "#/components/schemas/StellarPublicKey"
+          description: Issuer of the USDC being paid, as configured on the server.
+        destination:
+          allOf:
+            - $ref: "#/components/schemas/StellarPublicKey"
+          description: The provider's account, resolved from the bill by the server.
+        memo:
+          type: string
+          maxLength: 28
+          description: Text memo the transaction must carry. Ties the on-chain payment to this quote.
+        expiresAt:
+          type: string
+          format: date-time
+          description: The quote, the rate lock and the transaction's own time bound all end here.
+        state: { type: string, enum: [open, expired, submitted, confirmed, failed] }
+        network: { type: string, const: testnet }
+        networkPassphrase: { type: string, example: Test SDF Network ; September 2015 }
+        billId: { type: string }
+        provider:
+          type: object
+          properties:
+            id: { type: string }
+            displayName: { type: string }
+            fixture:
+              type: boolean
+              description: "`true` for the testnet fixture directory. A fixture is never a real provider."
+        fiat:
+          type: object
+          properties:
+            amountMinor: { type: string }
+            currency: { $ref: "#/components/schemas/Currency" }
+        usdc:
+          type: object
+          properties:
+            amountStroops: { type: string }
+            amount: { type: string, description: Decimal with seven places, example: "10.0000000" }
+            assetCode: { type: string, const: USDC }
+            assetIssuer: { $ref: "#/components/schemas/StellarPublicKey" }
+        rate:
+          type: object
+          description: The disclosed rate behind the conversion.
+          properties:
+            usdMicroPerMajor:
+              type: string
+              description: Micro-USD per one major unit of the bill's currency.
+            source:
+              type: string
+              enum: [testnet-fixture]
+              description: "`testnet-fixture` means illustrative values, not market data."
+            lockedUntil: { type: string, format: date-time }
+        fees:
+          type: object
+          description: Every fee, and who pays it.
+          properties:
+            network:
+              type: object
+              properties:
+                asset: { type: string, const: XLM }
+                stroops: { type: string, example: "100" }
+                paidBy: { type: string, const: supporter }
+            platform:
+              type: object
+              properties:
+                bps: { type: integer, const: 0 }
+        source: { $ref: "#/components/schemas/StellarPublicKey" }
+        unsignedXdr:
+          type: string
+          description: |
+            The unsigned transaction envelope (base64 XDR). Sign exactly this with the supporter's wallet and
+            send the result to `POST /v1/payments`. Do not edit it.
+    PaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [quoteId, signedXdr]
+      properties:
+        quoteId: { type: string }
+        signedXdr:
+          type: string
+          maxLength: 16384
+          description: The quote's transaction, signed by the supporter's account.
+    Payment:
+      type: object
+      required: [paymentId, quoteId, billId, status, txHash, explorerUrl, submittedAt]
+      properties:
+        paymentId: { type: string, pattern: "^p_[a-z0-9]+$" }
+        quoteId: { type: string }
+        billId: { type: string }
+        status:
+          type: string
+          enum: [submitted, confirmed, failed]
+          description: |
+            Mirrors the client's `PaymentLifecycle`. `submitted` means sent but not yet independently confirmed.
+            `confirmed` means the recorded transaction matched the quote and a receipt exists. `failed` means it
+            did not land, or what landed did not match; there is no receipt.
+        txHash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        explorerUrl: { type: string, format: uri }
+        submittedAt: { type: string, format: date-time }
+        confirmedAt: { type: string, format: date-time }
+        stellarLedger: { type: integer }
+        note:
+          type: string
+          description: Present while the network has not given a definite answer.
+        failure:
+          type: object
+          properties:
+            code:
+              type: string
+              description: A network result code, `confirmation_mismatch`, `transaction_not_successful`, or `expired_unseen`.
+            message: { type: string }
+        receipt: { $ref: "#/components/schemas/Receipt" }
+    Receipt:
+      type: object
+      required: [id, sequence, prevHash, hash, paymentId, quoteId, billId, txHash]
+      description: |
+        Append-only and hash-chained: `hash` covers the receipt and `prevHash`. Editing, removing or reordering
+        any receipt breaks every hash after it. The authority on whether the payment happened is the Stellar
+        transaction `txHash`; the receipt proves the sequence of receipts this service issued.
+      properties:
+        id: { type: string, pattern: "^r_[a-z0-9]+$" }
+        sequence: { type: integer, minimum: 1 }
+        prevHash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        paymentId: { type: string }
+        quoteId: { type: string }
+        billId: { type: string }
+        providerId: { type: string }
+        network: { type: string, const: testnet }
+        usdc:
+          type: object
+          properties:
+            amountStroops: { type: string }
+            code: { type: string }
+            issuer: { $ref: "#/components/schemas/StellarPublicKey" }
+        fiat:
+          type: object
+          properties:
+            amountMinor: { type: string }
+            currency: { type: string }
+        destination: { $ref: "#/components/schemas/StellarPublicKey" }
+        source: { $ref: "#/components/schemas/StellarPublicKey" }
+        txHash: { type: string }
+        stellarLedger: { type: integer }
+        confirmedAt: { type: string, format: date-time }
+    Bill:
+      type: object
+      required: [id, status, currency, totalMinor, fundedMinor, reservedMinor, remainingMinor]
+      description: Server-side accounting. All amounts are integer minor units, as strings.
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [open, settled, paused, under_review] }
+        currency: { $ref: "#/components/schemas/Currency" }
+        totalMinor: { type: string }
+        fundedMinor: { type: string, description: Confirmed contributions, including any funded before tracking began. }
+        reservedMinor: { type: string, description: Unexpired quotes and submitted-but-unconfirmed payments. }
+        remainingMinor: { type: string, description: Total minus funded minus reserved, never negative. }
+        acceptsPartialFunding: { type: boolean }
+        provider:
+          type: object
+          properties:
+            id: { type: string }
+            displayName: { type: string }
+            verification: { type: string, enum: [fixture, verified] }
+    LedgerStatus:
+      type: object
+      required: [count, headHash, verified]
+      properties:
+        count: { type: integer, minimum: 0 }
+        headHash: { type: string }
+        verified: { type: boolean, description: Whether every hash and link in the chain recomputes. }
+        brokenAt: { type: integer }
+        reason: { type: string }
+    ServiceConfig:
+      type: object
+      properties:
+        network: { type: string, const: testnet }
+        networkPassphrase: { type: string }
+        asset:
+          type: object
+          properties:
+            code: { type: string, const: USDC }
+            issuer: { $ref: "#/components/schemas/StellarPublicKey" }
+        quoteTtlSeconds: { type: integer }
+        rateSource: { type: string, const: testnet-fixture }
+        mode: { type: string, const: testnet-only }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable and machine-readable.
+              example: client_authority_forbidden
+            message:
+              type: string
+              description: Safe to show a person.
+            details:
+              type: object
+              additionalProperties: true
+              description: Structured context, for example the `field` that differs in a signed payload, or `remainingMinor`.
+            requestId:
+              type: string
+              format: uuid
+              description: Quote this when reporting a problem.

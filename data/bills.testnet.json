@@ -1,0 +1,50 @@
+{
+  "_notice": "Mirrors the demo bills in the Settle app. Amounts are server authority: the client never states what a bill totals or who is paid.",
+  "bills": [
+    {
+      "id": "bill-amina-electricity",
+      "providerId": "prov-ng-electricity",
+      "currency": "NGN",
+      "totalMinor": 4860000,
+      "fundedMinor": 3100000,
+      "acceptsPartialFunding": true,
+      "status": "open"
+    },
+    {
+      "id": "bill-daniel-heating",
+      "providerId": "prov-gb-energy",
+      "currency": "GBP",
+      "totalMinor": 18400,
+      "fundedMinor": 0,
+      "acceptsPartialFunding": true,
+      "status": "open"
+    },
+    {
+      "id": "bill-maya-prescription",
+      "providerId": "prov-us-pharmacy",
+      "currency": "USD",
+      "totalMinor": 12600,
+      "fundedMinor": 7600,
+      "acceptsPartialFunding": true,
+      "status": "open"
+    },
+    {
+      "id": "bill-joseph-school-fees",
+      "providerId": "prov-ke-school",
+      "currency": "KES",
+      "totalMinor": 2350000,
+      "fundedMinor": 850000,
+      "acceptsPartialFunding": true,
+      "status": "open"
+    },
+    {
+      "id": "bill-leila-internet",
+      "providerId": "prov-ca-internet",
+      "currency": "CAD",
+      "totalMinor": 9400,
+      "fundedMinor": 9400,
+      "acceptsPartialFunding": true,
+      "status": "settled"
+    }
+  ]
+}

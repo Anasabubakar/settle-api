@@ -1,0 +1,50 @@
+{
+  "_notice": "TESTNET FIXTURES ONLY. These accounts do not belong to real providers. A real directory needs verified provider onboarding, destination ownership proof and change control.",
+  "providers": [
+    {
+      "id": "prov-ng-electricity",
+      "displayName": "Local electricity provider",
+      "category": "electricity",
+      "country": "NG",
+      "destination": "GCA6O443KHQ55VMHDJJVL2KKLSKQ7MDKBPTG633LJIBZG6KMQ3NK3R4Q",
+      "verification": "fixture",
+      "fixture": true
+    },
+    {
+      "id": "prov-gb-energy",
+      "displayName": "Regional energy provider",
+      "category": "heating",
+      "country": "GB",
+      "destination": "GCC3MRI2HXSWNOF7SLLJTV4VDSMW66COW5COU3AMCEYQJDCRK56CGZPQ",
+      "verification": "fixture",
+      "fixture": true
+    },
+    {
+      "id": "prov-us-pharmacy",
+      "displayName": "Community pharmacy",
+      "category": "medical",
+      "country": "US",
+      "destination": "GBM4YYYYL6QP27LNU66EGCZNTPNXKHXOH4BGDTAUISUINZ5ICBSMR53Q",
+      "verification": "fixture",
+      "fixture": true
+    },
+    {
+      "id": "prov-ke-school",
+      "displayName": "Local primary school",
+      "category": "education",
+      "country": "KE",
+      "destination": "GCNKT3G7PK34SPXXK3P5SZN34ARTNGPSUHHHGJSQC2TVZHCULM7RRAQJ",
+      "verification": "fixture",
+      "fixture": true
+    },
+    {
+      "id": "prov-ca-internet",
+      "displayName": "Home internet provider",
+      "category": "internet",
+      "country": "CA",
+      "destination": "GCLNLYE2PN6OGJMPJ2IDFUCXLQQDFOMHD77XO3WUDTXYQJMOUDHT2GQZ",
+      "verification": "fixture",
+      "fixture": true
+    }
+  ]
+}

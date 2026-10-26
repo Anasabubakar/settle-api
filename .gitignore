@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+data/*.jsonl
+data/*.json
+!data/providers.testnet.json
+!data/bills.testnet.json
+*.log
+.DS_Store

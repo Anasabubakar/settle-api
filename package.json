@@ -1,0 +1,25 @@
+{
+  "name": "settle-api",
+  "version": "0.1.0",
+  "description": "Testnet-only settlement service for Settle: verified quotes, unsigned Stellar payments, idempotent submission, independent confirmation and an append-only receipt ledger.",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "check": "npm run typecheck && npm test",
+    "e2e:testnet": "node scripts/e2e-testnet.ts"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^17.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.3"
+  }
+}

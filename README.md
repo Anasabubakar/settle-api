@@ -16,7 +16,7 @@ The testnet settlement service behind [Settle](https://github.com/Anasabubakar/s
   <img alt="Node" src="https://img.shields.io/badge/Node-24-339933?style=flat-square&logo=nodedotjs&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Stellar" src="https://img.shields.io/badge/Stellar-testnet%20only-6D4AFF?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-140%20passing-9AFF22?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-143%20passing-9AFF22?style=flat-square">
   <img alt="Mainnet" src="https://img.shields.io/badge/mainnet-disabled-red?style=flat-square">
 </p>
 
@@ -136,6 +136,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the state machines, idemp
 | Exchange rates | 🟡 **Fixtures.** Illustrative values, labelled `testnet-fixture`, not market data |
 | Authentication and identity | 🔴 Not built. Quote endpoints are unauthenticated and bounded by rate limits and bill totals |
 | Storage | 🟡 A snapshot file. Fine for a pilot; production needs a database |
+| Private evidence | 🟡 Encrypted local quarantine and manual redacted review for internal synthetic data; not connected to public client |
 | Mainnet | 🔴 Disabled in code. Needs verified providers, a real rate source, compliance review and an audit |
 
 ## Project layout
@@ -152,11 +153,14 @@ See [`docs/architecture.md`](docs/architecture.md) for the state machines, idemp
 | `openapi.yaml` | The API contract |
 | `docs/` | Architecture, threat model, testnet evidence |
 
+The separate [private evidence service](docs/evidence-api.md) adds encrypted quarantine, a named human review step, a minimal redacted summary and an audit trail for internal synthetic-data rehearsal. The [pilot runbook](docs/pilot-runbook.md) states what must be proven before involving real participants.
+
 ## Roadmap
 
 - [x] Settlement API contract and testnet implementation
 - [x] Idempotent submission, independent confirmation, receipt ledger
 - [x] Live testnet proof
+- [x] Encrypted evidence quarantine and manual human review foundation
 - [ ] Authentication and per-supporter limits
 - [ ] Database storage and an observer run as its own process
 - [ ] Verified provider onboarding and destination-ownership proof

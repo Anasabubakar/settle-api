@@ -20,3 +20,5 @@ Scope: the testnet service in this repository. Assets: the integrity of who gets
 ## Not covered
 
 Provider identity and destination ownership, rate integrity, sanctions and compliance obligations, denial of service at scale, and an external audit. These must be resolved before any mainnet decision.
+
+The private evidence service uses two static role tokens and binds to loopback. It is suitable only for synthetic internal rehearsal: it lacks individual reviewer authorization, malware scanning, automated redaction, and externally managed backups. See [the evidence API](evidence-api.md) and [pilot runbook](pilot-runbook.md).

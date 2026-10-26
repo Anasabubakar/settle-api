@@ -11,3 +11,5 @@ View it: https://stellar.expert/explorer/testnet/tx/a16dc9c266ca37d3e699efef9718
 The script checks that the quote resolves the destination server-side, a tampered signed transaction is rejected, the real payment is accepted and independently confirmed, the receipt chain verifies, a repeated submission is idempotent, and balances on Horizon moved by exactly the quoted amount.
 
 Testnet is reset periodically, so the transaction link may stop resolving; rerun the script to reproduce.
+
+Rerun on October 26, 2026: all 11 checks passed again. Transaction `3d73b3d59ae8ae2edb84d1d412639ceb229551adcd1662ce9aab0312a8fe4b9e` ([testnet explorer](https://stellar.expert/explorer/testnet/tx/3d73b3d59ae8ae2edb84d1d412639ceb229551adcd1662ce9aab0312a8fe4b9e)).

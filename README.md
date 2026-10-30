@@ -151,7 +151,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the state machines, idemp
 | `src/money.ts` | Integer-only fiat ↔ USDC arithmetic |
 | `data/` | Testnet fixture providers and bills |
 | `openapi.yaml` | The API contract |
-| `docs/` | Architecture, threat model, testnet evidence |
+| `docs/` | Architecture, threat model, testnet evidence, [container notes](docs/docker.md) |
 
 The separate [private evidence service](docs/evidence-api.md) adds encrypted quarantine, a named human review step, a minimal redacted summary and an audit trail for internal synthetic-data rehearsal. The [pilot runbook](docs/pilot-runbook.md) states what must be proven before involving real participants.
 

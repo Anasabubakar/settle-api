@@ -138,6 +138,7 @@ export function createApp(options: AppOptions): AppHandler {
       headers["access-control-allow-headers"] = "content-type, idempotency-key";
       headers["access-control-allow-methods"] = "GET, POST, OPTIONS";
       headers["access-control-max-age"] = "600";
+      headers["access-control-expose-headers"] = "retry-after, idempotent-replay, x-request-id";
     }
 
     try {

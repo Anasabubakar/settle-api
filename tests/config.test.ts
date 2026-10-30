@@ -56,4 +56,15 @@ describe("loadConfig", () => {
   it("labels its rates as fixtures, not market data", () => {
     assert.equal(loadConfig(valid).rateSource, "testnet-fixture");
   });
+
+  it("accepts bare https origins and localhost http origins for CORS", () => {
+    const config = loadConfig({ ...valid, SETTLE_CORS_ORIGINS: "https://settle.example.com, http://localhost:8081,http://127.0.0.1:4173" });
+    assert.deepEqual(config.corsOrigins, ["https://settle.example.com", "http://localhost:8081", "http://127.0.0.1:4173"]);
+  });
+
+  it("refuses CORS entries that could never match a browser origin", () => {
+    for (const bad of ["*", "https://settle.example.com/", "https://settle.example.com/app", "settle.example.com", "http://settle.example.com", "https://*.example.com"]) {
+      assert.throws(() => loadConfig({ ...valid, SETTLE_CORS_ORIGINS: bad }), ConfigError, bad);
+    }
+  });
 });

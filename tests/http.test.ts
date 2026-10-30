@@ -206,6 +206,7 @@ describe("browser access", () => {
     assert.equal(response.status, 204);
     assert.match(response.headers.get("access-control-allow-headers") ?? "", /idempotency-key/);
     assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:8081");
+    assert.match(response.headers.get("access-control-expose-headers") ?? "", /retry-after/);
   });
 });
 

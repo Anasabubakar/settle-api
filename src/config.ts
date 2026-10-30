@@ -57,6 +57,31 @@ function integer(env: Record<string, string | undefined>, key: string, fallback:
 }
 
 /**
+ * A browser sends the bare origin ("https://app.example.com"), so an allow-list entry with a trailing slash, a path
+ * or a wildcard would silently never match and the web app would fail with an opaque CORS error. Refuse it at
+ * startup instead. Plain http is accepted only for localhost.
+ */
+export function parseCorsOrigins(raw: string): string[] {
+  const origins = raw.split(",").map((origin) => origin.trim()).filter(Boolean);
+  for (const origin of origins) {
+    let url: URL;
+    try {
+      url = new URL(origin);
+    } catch {
+      throw new ConfigError(`SETTLE_CORS_ORIGINS entry "${origin}" is not a valid origin (expected e.g. https://app.example.com).`);
+    }
+    if (url.origin !== origin || origin.endsWith("/") || origin.includes("*")) {
+      throw new ConfigError(`SETTLE_CORS_ORIGINS entry "${origin}" must be a bare origin with no path, trailing slash or wildcard (expected ${url.origin}).`);
+    }
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
+      throw new ConfigError(`SETTLE_CORS_ORIGINS entry "${origin}" must use https (http is allowed only for localhost).`);
+    }
+  }
+  return origins;
+}
+
+/**
  * Read and validate configuration. It throws rather than guessing: a payment
  * service that starts with a half-valid configuration is worse than one that
  * refuses to start.
@@ -104,10 +129,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxFeeStroops,
     minContributionMinor: BigInt(integer(env, "SETTLE_MIN_CONTRIBUTION_MINOR", 100, 1, 1_000_000)),
     dataDir: env.SETTLE_DATA_DIR?.trim() || "./data",
-    corsOrigins: (env.SETTLE_CORS_ORIGINS ?? "http://localhost:8081,http://localhost:19006")
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    corsOrigins: parseCorsOrigins(env.SETTLE_CORS_ORIGINS ?? "http://localhost:8081,http://localhost:19006"),
     rateLimitPerMinute: integer(env, "SETTLE_RATE_LIMIT_PER_MINUTE", 60, 1, 100_000),
     expiryGraceSeconds: integer(env, "SETTLE_EXPIRY_GRACE_SECONDS", 120, 0, 3600),
     rates: TESTNET_FIXTURE_RATES,

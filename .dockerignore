@@ -1,0 +1,14 @@
+node_modules
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+tests
+scripts
+docs
+data/*.jsonl
+data/state.json
+Dockerfile
+.dockerignore
